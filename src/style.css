@@ -1,0 +1,469 @@
+:root {
+  --negro: #161513;
+  --negro-suave: #232120;
+  --carbon: #2c2a28;
+  --mostaza: #d9a441;
+  --mostaza-suave: #f1c979;
+  --crema: #f6f2ea;
+  --texto: #232120;
+  --texto-muted: #8a8580;
+  --borde: #e7e2d8;
+  --exito: #2f7d4f;
+  --exito-bg: #e1f2e6;
+  --peligro: #b3432f;
+  --peligro-bg: #fbe6e1;
+  --pendiente: #a2761a;
+  --pendiente-bg: #fbedcd;
+  --sombra: 0 4px 16px rgba(22, 21, 19, 0.08);
+  --sombra-hover: 0 8px 24px rgba(22, 21, 19, 0.14);
+  --radio: 14px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Poppins", "Segoe UI", Arial, sans-serif;
+  background: var(--crema);
+  color: var(--texto);
+}
+
+/* ---------- Header ---------- */
+
+.app-header {
+  background: linear-gradient(135deg, var(--negro) 0%, var(--negro-suave) 100%);
+  color: #fff;
+  padding: 18px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
+  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s ease;
+}
+
+/* Al scrollear hacia abajo el header sube y se desvanece, como el
+   comportamiento nativo de iOS al ocultar la nav bar */
+.app-header.header-hidden {
+  transform: translateY(-100%);
+  opacity: 0;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand-mark {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: var(--mostaza);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.brand-mark svg {
+  width: 20px;
+  height: 20px;
+}
+
+.app-header h1 {
+  font-family: "Bebas Neue", "Poppins", sans-serif;
+  font-size: 24px;
+  letter-spacing: 1px;
+  margin: 0;
+  line-height: 1;
+}
+
+.app-header .tagline {
+  font-size: 11px;
+  color: var(--mostaza-suave);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+
+.app-header nav {
+  display: flex;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 4px;
+  border-radius: 999px;
+}
+
+.app-header nav a {
+  color: rgba(255, 255, 255, 0.75);
+  text-decoration: none;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 999px;
+  transition: all 0.2s ease;
+}
+
+.app-header nav a:hover {
+  color: #fff;
+}
+
+.app-header nav a.router-link-exact-active {
+  background: var(--mostaza);
+  color: var(--negro);
+}
+
+/* ---------- Layout ---------- */
+
+.container {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 28px 18px 70px;
+}
+
+.page-title {
+  margin-bottom: 18px;
+}
+
+.page-title h2 {
+  font-family: "Bebas Neue", sans-serif;
+  font-size: 30px;
+  letter-spacing: 0.5px;
+  margin: 0 0 2px;
+  color: var(--negro);
+}
+
+.page-title p {
+  margin: 0;
+  color: var(--texto-muted);
+  font-size: 14px;
+}
+
+/* ---------- Cards ---------- */
+
+.card {
+  background: #fff;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  padding: 18px 20px;
+  margin-bottom: 14px;
+  box-shadow: var(--sombra);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.card-header strong {
+  font-size: 15px;
+}
+
+/* ---------- Buttons ---------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  border-radius: 10px;
+  padding: 11px 20px;
+  font-weight: 600;
+  font-size: 13.5px;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  font-family: inherit;
+}
+
+.btn:active {
+  transform: scale(0.97);
+}
+
+.btn-primary {
+  background: var(--negro);
+  color: var(--mostaza-suave);
+}
+
+.btn-primary:hover {
+  background: var(--negro-suave);
+  box-shadow: 0 4px 14px rgba(22, 21, 19, 0.3);
+}
+
+.btn-secondary {
+  background: #eee9de;
+  color: var(--texto);
+}
+
+.btn-secondary:hover {
+  background: #e2dccc;
+}
+
+.btn-danger {
+  background: var(--peligro-bg);
+  color: var(--peligro);
+}
+
+.btn-danger:hover {
+  background: #f5d5cc;
+}
+
+.btn-success {
+  background: var(--exito-bg);
+  color: var(--exito);
+}
+
+.btn-success:hover {
+  background: #cde9d6;
+}
+
+.btn-block {
+  width: 100%;
+  justify-content: center;
+  padding: 13px 20px;
+}
+
+/* ---------- Badges ---------- */
+
+.badge {
+  display: inline-block;
+  font-size: 11.5px;
+  padding: 4px 11px;
+  border-radius: 999px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.badge-pendiente {
+  background: var(--pendiente-bg);
+  color: var(--pendiente);
+}
+
+.badge-completado {
+  background: var(--exito-bg);
+  color: var(--exito);
+}
+
+.badge-cancelado {
+  background: var(--peligro-bg);
+  color: var(--peligro);
+}
+
+/* ---------- Timeline (agenda) ---------- */
+
+.timeline-item {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.timeline-hora {
+  min-width: 58px;
+  font-weight: 700;
+  color: var(--negro);
+  font-size: 14px;
+  font-family: "Bebas Neue", sans-serif;
+  letter-spacing: 0.5px;
+  border-left: 3px solid var(--mostaza);
+  padding-left: 10px;
+}
+
+.avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--negro);
+  color: var(--mostaza-suave);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.avatar-empty {
+  background: #eee9de;
+  color: var(--texto-muted);
+}
+
+.turno-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.turno-info strong {
+  font-size: 14.5px;
+}
+
+.card.turno-card:hover {
+  box-shadow: var(--sombra-hover);
+  transform: translateY(-1px);
+  border-color: var(--mostaza-suave);
+}
+
+.card.turno-libre {
+  background: repeating-linear-gradient(
+    135deg,
+    #fff,
+    #fff 10px,
+    #fbf8f1 10px,
+    #fbf8f1 20px
+  );
+  cursor: default;
+}
+
+/* ---------- Slots (reserva cliente) ---------- */
+
+.slots-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.slot {
+  border: 1.5px solid var(--borde);
+  background: #fff;
+  border-radius: 10px;
+  padding: 12px 8px;
+  text-align: center;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.15s ease;
+}
+
+.slot:hover {
+  border-color: var(--mostaza);
+  background: #fff8ea;
+}
+
+.slot.selected {
+  background: var(--negro);
+  color: var(--mostaza-suave);
+  border-color: var(--negro);
+}
+
+/* ---------- Forms ---------- */
+
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 700;
+  margin-bottom: 6px;
+  color: var(--texto-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.form-group input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1.5px solid var(--borde);
+  border-radius: 10px;
+  font-size: 14.5px;
+  font-family: inherit;
+  transition: border-color 0.15s ease;
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: var(--mostaza);
+}
+
+.error-text {
+  color: var(--peligro);
+  font-size: 13px;
+  margin: 0 0 12px;
+  font-weight: 600;
+}
+
+/* ---------- Confirmation ---------- */
+
+.center-text {
+  text-align: center;
+}
+
+.check-circle {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--exito-bg);
+  color: var(--exito);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 6px auto 14px;
+}
+
+.check-circle svg {
+  width: 30px;
+  height: 30px;
+}
+
+.muted {
+  color: var(--texto-muted);
+  font-size: 13.5px;
+}
+
+/* ---------- Modal ---------- */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(22, 21, 19, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 50;
+  animation: fadeIn 0.15s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.modal {
+  max-width: 380px;
+  width: 100%;
+  border-radius: 16px;
+}
+
+/* ---------- Transición entre pantallas ---------- */
+
+.page-enter-active,
+.page-leave-active {
+  transition: opacity 0.28s ease, transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.page-enter-from {
+  opacity: 0;
+  transform: translateY(14px);
+}
+
+.page-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
