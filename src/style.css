@@ -139,10 +139,17 @@ body {
   }
 
   .app-header nav a {
-    padding: 7px 11px;
+    padding: 7px 10px;
     font-size: 12.5px;
   }
+}
 
+/* En pantallas muy angostas queda solo el logo, así entra todo el menú
+   (el dueño tiene 4 opciones: Agenda, Servicios, Clave y Salir) */
+@media (max-width: 430px) {
+  .brand > div:not(.brand-mark) {
+    display: none;
+  }
 }
 
 /* Aviso cuando la app corre sin Supabase */
@@ -440,6 +447,32 @@ body {
 .form-group input:focus {
   outline: none;
   border-color: var(--mostaza);
+}
+
+.form-group select {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1.5px solid var(--borde);
+  border-radius: 10px;
+  font-size: 14.5px;
+  font-family: inherit;
+  background: #fff;
+  color: var(--texto);
+}
+
+.form-group select:focus {
+  outline: none;
+  border-color: var(--mostaza);
+}
+
+.aviso-text {
+  background: var(--pendiente-bg);
+  color: var(--pendiente);
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 10px 14px;
+  border-radius: 10px;
+  margin: 0 0 14px;
 }
 
 .error-text {

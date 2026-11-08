@@ -23,6 +23,7 @@ drop function if exists public.cargar_datos_iniciales(uuid, uuid) cascade;
 drop function if exists public.horarios_disponibles(text, date) cascade;
 drop function if exists public.reservar_turno(text, bigint, date, time, text, text) cascade;
 drop function if exists public.mi_barberia() cascade;
+drop function if exists public.mi_rol() cascade;
 drop function if exists public.generar_slug(text) cascade;
 
 drop table if exists public.turnos    cascade;
@@ -172,7 +173,18 @@ create index horarios_por_perfil       on public.horarios (perfil_id);
 
 -- =====================================================================
 -- 7. SEGURIDAD (Row Level Security)
---    Cada barbero solo puede ver y tocar los datos de SU barbería.
+--    Cada usuario solo puede ver y tocar los datos de SU barbería,
+--    y dentro de su barbería solo lo que le permite su rol:
+--
+--    | Acción                          | dueno | barbero         |
+--    |---------------------------------|-------|-----------------|
+--    | Ver turnos y clientes           |  sí   | sí              |
+--    | Crear / modificar turnos        |  sí   | solo los suyos  |
+--    | Eliminar turnos y clientes      |  sí   | no              |
+--    | Crear / editar / borrar servic. |  sí   | no (solo ver)   |
+--    | Cambiar horarios                |  sí   | no (solo ver)   |
+--    | Editar los datos de la barbería |  sí   | no              |
+--    | Cambiar su propio rol           |  no   | no              |
 -- =====================================================================
 
 -- Devuelve la barbería del usuario logueado.
@@ -186,6 +198,18 @@ security definer
 set search_path = public
 as $$
   select barberia_id from public.perfiles where id = auth.uid()
+$$;
+
+-- Devuelve el rol del usuario logueado ('dueno' o 'barbero').
+-- Si el perfil está desactivado devuelve null: pierde los permisos.
+create function public.mi_rol()
+returns text
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select rol from public.perfiles where id = auth.uid() and activo
 $$;
 
 alter table public.barberias enable row level security;
@@ -203,52 +227,88 @@ create policy "barberias: lectura publica"
 
 create policy "barberias: el dueno edita la suya"
   on public.barberias for update to authenticated
-  using (
-    id = public.mi_barberia()
-    and exists (select 1 from public.perfiles
-                where id = auth.uid() and rol = 'dueno')
-  );
+  using (id = public.mi_barberia() and public.mi_rol() = 'dueno')
+  with check (id = public.mi_barberia());
 
--- PERFILES: veo a los barberos de mi barbería; cada uno edita el suyo
+-- PERFILES: veo a los barberos de mi barbería; cada uno edita el suyo,
+-- pero NO puede cambiarse el rol ni pasarse a otra barbería
+-- (mi_rol() todavía ve el rol de antes del cambio).
 create policy "perfiles: ver los de mi barberia"
   on public.perfiles for select to authenticated
   using (barberia_id = public.mi_barberia());
 
-create policy "perfiles: editar el propio"
+create policy "perfiles: editar el propio sin cambiar el rol"
   on public.perfiles for update to authenticated
   using (id = auth.uid())
-  with check (barberia_id = public.mi_barberia());
+  with check (barberia_id = public.mi_barberia() and rol = public.mi_rol());
 
--- SERVICIOS y HORARIOS: lectura pública (para reservar) y
--- edición solo desde la barbería dueña
+-- SERVICIOS y HORARIOS: lectura pública (para reservar).
+-- Crear, modificar y eliminar: solo el dueño de la barbería.
 create policy "servicios: lectura publica de los activos"
   on public.servicios for select
   using (activo or barberia_id = public.mi_barberia());
 
-create policy "servicios: gestion de mi barberia"
+create policy "servicios: el dueno los gestiona"
   on public.servicios for all to authenticated
-  using (barberia_id = public.mi_barberia())
-  with check (barberia_id = public.mi_barberia());
+  using (barberia_id = public.mi_barberia() and public.mi_rol() = 'dueno')
+  with check (barberia_id = public.mi_barberia() and public.mi_rol() = 'dueno');
 
 create policy "horarios: lectura publica"
   on public.horarios for select
   using (true);
 
-create policy "horarios: gestion de mi barberia"
+create policy "horarios: el dueno los gestiona"
   on public.horarios for all to authenticated
+  using (barberia_id = public.mi_barberia() and public.mi_rol() = 'dueno')
+  with check (barberia_id = public.mi_barberia() and public.mi_rol() = 'dueno');
+
+-- CLIENTES: todos los de la barbería los ven, cargan y corrigen;
+-- eliminar, solo el dueño.
+create policy "clientes: ver los de mi barberia"
+  on public.clientes for select to authenticated
+  using (barberia_id = public.mi_barberia());
+
+create policy "clientes: cargar en mi barberia"
+  on public.clientes for insert to authenticated
+  with check (barberia_id = public.mi_barberia());
+
+create policy "clientes: editar los de mi barberia"
+  on public.clientes for update to authenticated
   using (barberia_id = public.mi_barberia())
   with check (barberia_id = public.mi_barberia());
 
--- CLIENTES y TURNOS: son datos privados de cada barbería
-create policy "clientes: solo mi barberia"
-  on public.clientes for all to authenticated
-  using (barberia_id = public.mi_barberia())
-  with check (barberia_id = public.mi_barberia());
+create policy "clientes: solo el dueno elimina"
+  on public.clientes for delete to authenticated
+  using (barberia_id = public.mi_barberia() and public.mi_rol() = 'dueno');
 
-create policy "turnos: solo mi barberia"
-  on public.turnos for all to authenticated
-  using (barberia_id = public.mi_barberia())
-  with check (barberia_id = public.mi_barberia());
+-- TURNOS: todos los de la barbería ven la agenda completa.
+-- El dueño crea y modifica cualquiera; el barbero, solo los suyos.
+-- Eliminar, solo el dueño (el barbero puede cancelarlos).
+create policy "turnos: ver los de mi barberia"
+  on public.turnos for select to authenticated
+  using (barberia_id = public.mi_barberia());
+
+create policy "turnos: crear (el barbero solo para si mismo)"
+  on public.turnos for insert to authenticated
+  with check (
+    barberia_id = public.mi_barberia()
+    and (public.mi_rol() = 'dueno' or perfil_id = auth.uid())
+  );
+
+create policy "turnos: modificar (el barbero solo los suyos)"
+  on public.turnos for update to authenticated
+  using (
+    barberia_id = public.mi_barberia()
+    and (public.mi_rol() = 'dueno' or perfil_id = auth.uid())
+  )
+  with check (
+    barberia_id = public.mi_barberia()
+    and (public.mi_rol() = 'dueno' or perfil_id = auth.uid())
+  );
+
+create policy "turnos: solo el dueno elimina"
+  on public.turnos for delete to authenticated
+  using (barberia_id = public.mi_barberia() and public.mi_rol() = 'dueno');
 
 
 -- =====================================================================

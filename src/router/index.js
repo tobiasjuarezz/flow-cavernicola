@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from "vue-router";
 import { supabase } from "@/supabase";
+import { obtenerMiPerfil } from "@/services/db";
 
 import AgendaBarbero from "../views/AgendaBarbero.vue";
 import ReservaCliente from "../views/ReservaCliente.vue";
@@ -7,6 +8,7 @@ import ConfirmacionReserva from "../views/ConfirmacionReserva.vue";
 import LoginView from "../views/LoginView.vue";
 import RegistroView from "../views/RegistroView.vue";
 import CambiarPasswordView from "../views/CambiarPasswordView.vue";
+import ServiciosView from "../views/ServiciosView.vue";
 
 const routes = [
   {
@@ -20,6 +22,13 @@ const routes = [
     name: "agenda",
     component: AgendaBarbero,
     meta: { requiereAuth: true },
+  },
+  // Solo el dueño de la barbería
+  {
+    path: "/servicios",
+    name: "servicios",
+    component: ServiciosView,
+    meta: { requiereAuth: true, rol: "dueno" },
   },
   {
     path: "/cambiar-password",
@@ -67,7 +76,10 @@ const router = createRouter({
   routes,
 });
 
-// Antes de entrar a cada página, me fijo si hay un usuario logueado
+// Antes de entrar a cada página, me fijo si hay un usuario logueado.
+// getSession() lee la sesión guardada: si se cerró o venció (y no se
+// pudo renovar), devuelve null y la página privada no se abre aunque
+// la escriban directo en la barra de direcciones.
 router.beforeEach(async (to) => {
   const { data } = await supabase.auth.getSession();
   const logueado = !!data.session;
@@ -76,6 +88,15 @@ router.beforeEach(async (to) => {
   // (guardo a dónde quería ir para mandarlo ahí después de loguearse)
   if (to.meta.requiereAuth && !logueado) {
     return { name: "login", query: { redirect: to.fullPath } };
+  }
+
+  // Página solo para un rol (ej: servicios, solo el dueño).
+  // Igual la base vuelve a controlar el rol con RLS en cada operación.
+  if (to.meta.rol) {
+    const { data: perfil } = await obtenerMiPerfil();
+    if (perfil?.rol !== to.meta.rol) {
+      return { name: "agenda", query: { aviso: "sin-permiso" } };
+    }
   }
 
   // Ya está logueado y quiere ir al login o al registro -> a la agenda

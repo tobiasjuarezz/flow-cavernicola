@@ -1,23 +1,41 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { supabase, modoDemo } from "@/supabase";
+import { obtenerMiPerfil } from "@/services/db";
 import { useHideOnScroll } from "./composables/useHideOnScroll";
 
 const router = useRouter();
+const route = useRoute();
 const { visible } = useHideOnScroll();
 
 const usuario = ref(null);
+const rol = ref(null); // "dueno" o "barbero": decide qué opciones se ven
 let suscripcion = null;
+
+async function actualizarUsuario(session) {
+  usuario.value = session?.user ?? null;
+  rol.value = null;
+  if (usuario.value) {
+    const { data } = await obtenerMiPerfil();
+    rol.value = data?.rol ?? null;
+  }
+}
 
 onMounted(async () => {
   // Al cargar la app, me fijo si ya había una sesión abierta
   const { data } = await supabase.auth.getSession();
-  usuario.value = data.session?.user ?? null;
+  await actualizarUsuario(data.session);
 
-  // Cada vez que alguien inicia o cierra sesión, actualizo el header
+  // Cada vez que alguien inicia o cierra sesión (o la sesión vence),
+  // actualizo el header. Si se quedó sin sesión estando en una página
+  // privada, lo saco al login.
   const { data: listener } = supabase.auth.onAuthStateChange((_evento, session) => {
-    usuario.value = session?.user ?? null;
+    // setTimeout: Supabase recomienda no hacer consultas dentro del aviso
+    setTimeout(() => actualizarUsuario(session), 0);
+    if (!session && route.meta.requiereAuth) {
+      router.push({ name: "login" });
+    }
   });
   suscripcion = listener.subscription;
 });
@@ -55,6 +73,7 @@ async function cerrarSesion() {
     <nav>
       <template v-if="usuario">
         <router-link to="/agenda">Agenda</router-link>
+        <router-link v-if="rol === 'dueno'" to="/servicios">Servicios</router-link>
         <router-link to="/cambiar-password">Clave</router-link>
         <a href="#" @click.prevent="cerrarSesion">Salir</a>
       </template>

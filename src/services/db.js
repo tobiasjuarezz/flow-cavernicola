@@ -13,6 +13,22 @@
 import { supabase, modoDemo } from "@/supabase";
 import * as demo from "./dbDemo";
 
+// Cuando las reglas de seguridad (RLS) no dejan modificar o borrar una
+// fila, Supabase NO devuelve error: simplemente no toca ninguna fila.
+// Por eso pido las filas afectadas con .select() y, si no vino ninguna,
+// lo convierto en un error que la pantalla pueda mostrar.
+async function exigirFilas(consulta) {
+  const { data, error } = await consulta;
+  if (error) return { data: null, error };
+  if (!data || data.length === 0) {
+    return {
+      data: null,
+      error: { code: "SIN_PERMISO", message: "No tenés permiso para hacer eso." },
+    };
+  }
+  return { data, error: null };
+}
+
 const real = {
   // -------------------------------------------------------------------
   // PERFIL / BARBERÍA del usuario logueado
@@ -51,6 +67,18 @@ const real = {
       .order("nombre");
   },
 
+  // Si trae id es edición, si no es alta. Solo el dueño puede (RLS).
+  guardarServicio(servicio) {
+    const { id, ...datos } = servicio;
+    return id
+      ? exigirFilas(supabase.from("servicios").update(datos).eq("id", id).select("id"))
+      : supabase.from("servicios").insert(datos).select("id").single();
+  },
+
+  eliminarServicio(id) {
+    return exigirFilas(supabase.from("servicios").delete().eq("id", id).select("id"));
+  },
+
   listarBarberos(barberiaId) {
     return supabase
       .from("perfiles")
@@ -82,9 +110,12 @@ const real = {
   // TURNOS (panel del barbero)
   // -------------------------------------------------------------------
 
-  // Agenda de un día con los datos del cliente, servicio y barbero unidos
-  listarTurnosDelDia(barberiaId, fecha) {
-    return supabase
+  // Turnos con cliente, servicio y barbero unidos.
+  // filtros = { desde, hasta, estado }: todos opcionales.
+  // La búsqueda por nombre y el orden los hace la pantalla sobre este
+  // resultado, que ya viene filtrado por barbería (y por RLS).
+  listarTurnos(barberiaId, { desde, hasta, estado } = {}) {
+    let consulta = supabase
       .from("turnos")
       .select(`
         id, fecha, hora, estado, notas,
@@ -92,9 +123,18 @@ const real = {
         servicio:servicios(id, nombre, duracion_min, precio),
         barbero:perfiles(id, nombre)
       `)
-      .eq("barberia_id", barberiaId)
-      .eq("fecha", fecha)
-      .order("hora");
+      .eq("barberia_id", barberiaId);
+
+    if (desde) consulta = consulta.gte("fecha", desde);
+    if (hasta) consulta = consulta.lte("fecha", hasta);
+    if (estado) consulta = consulta.eq("estado", estado);
+
+    return consulta.order("fecha").order("hora");
+  },
+
+  // Agenda de un solo día
+  listarTurnosDelDia(barberiaId, fecha) {
+    return real.listarTurnos(barberiaId, { desde: fecha, hasta: fecha });
   },
 
   crearTurno(turno) {
@@ -102,12 +142,15 @@ const real = {
     return supabase.from("turnos").insert(turno).select().single();
   },
 
+  // El barbero solo puede modificar sus turnos: si quiere tocar uno
+  // ajeno, RLS no deja y exigirFilas() lo avisa
   actualizarTurno(id, cambios) {
-    return supabase.from("turnos").update(cambios).eq("id", id);
+    return exigirFilas(supabase.from("turnos").update(cambios).eq("id", id).select("id"));
   },
 
+  // Solo el dueño puede eliminar
   eliminarTurno(id) {
-    return supabase.from("turnos").delete().eq("id", id);
+    return exigirFilas(supabase.from("turnos").delete().eq("id", id).select("id"));
   },
 
   // -------------------------------------------------------------------
@@ -146,8 +189,11 @@ export const {
   obtenerMiPerfil,
   buscarBarberiaPorSlug,
   listarServicios,
+  guardarServicio,
+  eliminarServicio,
   listarBarberos,
   guardarCliente,
+  listarTurnos,
   listarTurnosDelDia,
   crearTurno,
   actualizarTurno,

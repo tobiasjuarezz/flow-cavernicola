@@ -191,6 +191,48 @@ export async function listarServicios(barberiaId) {
   return ok(lista);
 }
 
+export async function guardarServicio(servicio) {
+  const db = leer();
+  const perfil = await miPerfil(db);
+  if (!perfil || perfil.rol !== "dueno" || perfil.barberia_id !== servicio.barberia_id) {
+    return falla("No tenés permiso para hacer eso.", "SIN_PERMISO");
+  }
+
+  // Igual que el unique (barberia_id, nombre) de la tabla
+  const repetido = !!servicio.nombre && db.servicios.some(
+    (s) =>
+      s.barberia_id === servicio.barberia_id &&
+      s.nombre.toLowerCase() === servicio.nombre.toLowerCase() &&
+      s.id !== servicio.id
+  );
+  if (repetido) return falla("duplicate key value", "23505");
+
+  if (servicio.id) {
+    const actual = db.servicios.find((s) => s.id === servicio.id && s.barberia_id === perfil.barberia_id);
+    if (!actual) return falla("No tenés permiso para hacer eso.", "SIN_PERMISO");
+    Object.assign(actual, servicio);
+  } else {
+    db.servicios.push({ activo: true, ...servicio, id: nuevoId(db) });
+  }
+  guardar(db);
+  return ok({ id: servicio.id });
+}
+
+export async function eliminarServicio(id) {
+  const db = leer();
+  const perfil = await miPerfil(db);
+  const servicio = db.servicios.find((s) => s.id === id);
+  if (!perfil || perfil.rol !== "dueno" || !servicio || servicio.barberia_id !== perfil.barberia_id) {
+    return falla("No tenés permiso para hacer eso.", "SIN_PERMISO");
+  }
+  // Igual que la clave foránea: no se borra un servicio que tiene turnos
+  if (db.turnos.some((t) => t.servicio_id === id)) return falla("foreign key", "23503");
+
+  db.servicios = db.servicios.filter((s) => s.id !== id);
+  guardar(db);
+  return ok([{ id }]);
+}
+
 export async function listarBarberos(barberiaId) {
   const lista = leer()
     .perfiles.filter((p) => p.barberia_id === barberiaId && p.activo)
@@ -221,14 +263,20 @@ export async function guardarCliente(barberiaId, nombre, telefono) {
 // ---------------------------------------------------------------------
 // TURNOS (panel del barbero)
 // ---------------------------------------------------------------------
-export async function listarTurnosDelDia(barberiaId, fecha) {
+export async function listarTurnos(barberiaId, { desde, hasta, estado } = {}) {
   const db = leer();
   const perfil = await miPerfil(db);
   if (!perfil || perfil.barberia_id !== barberiaId) return falla("No autorizado");
 
   const lista = db.turnos
-    .filter((t) => t.barberia_id === barberiaId && t.fecha === fecha)
-    .sort((a, b) => a.hora.localeCompare(b.hora))
+    .filter(
+      (t) =>
+        t.barberia_id === barberiaId &&
+        (!desde || t.fecha >= desde) &&
+        (!hasta || t.fecha <= hasta) &&
+        (!estado || t.estado === estado)
+    )
+    .sort((a, b) => (a.fecha + a.hora).localeCompare(b.fecha + b.hora))
     .map((t) => {
       const c = db.clientes.find((x) => x.id === t.cliente_id);
       const s = db.servicios.find((x) => x.id === t.servicio_id);
@@ -247,6 +295,10 @@ export async function listarTurnosDelDia(barberiaId, fecha) {
       };
     });
   return ok(lista);
+}
+
+export function listarTurnosDelDia(barberiaId, fecha) {
+  return listarTurnos(barberiaId, { desde: fecha, hasta: fecha });
 }
 
 export async function crearTurno(turno) {
@@ -288,7 +340,7 @@ export async function actualizarTurno(id, cambios) {
 
   Object.assign(turno, resultado);
   guardar(db);
-  return ok(null);
+  return ok([{ id }]);
 }
 
 export async function eliminarTurno(id) {
@@ -296,9 +348,11 @@ export async function eliminarTurno(id) {
   const perfil = await miPerfil(db);
   if (!perfil) return falla("No autorizado");
 
+  const antes = db.turnos.length;
   db.turnos = db.turnos.filter((t) => !(t.id === id && t.barberia_id === perfil.barberia_id));
+  if (db.turnos.length === antes) return falla("No tenés permiso para hacer eso.", "SIN_PERMISO");
   guardar(db);
-  return ok(null);
+  return ok([{ id }]);
 }
 
 // ---------------------------------------------------------------------

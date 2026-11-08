@@ -34,3 +34,24 @@ export function validarEmail(email) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(limpio)) return "El email no tiene un formato válido.";
   return "";
 }
+
+// Servicio de la barbería: las mismas reglas al crear y al modificar
+export function validarServicio({ nombre, duracion_min, precio }) {
+  const limpio = (nombre ?? "").trim();
+  if (!limpio) return "Completá el nombre del servicio.";
+  if (limpio.length < 2) return "El nombre del servicio es muy corto.";
+  if (limpio.length > 40) return "El nombre del servicio puede tener hasta 40 caracteres.";
+
+  if (duracion_min === "" || duracion_min === null || duracion_min === undefined) {
+    return "Completá la duración.";
+  }
+  if (!Number.isInteger(Number(duracion_min)) || duracion_min < 5 || duracion_min > 480) {
+    return "La duración tiene que ser un número entero de minutos, entre 5 y 480.";
+  }
+
+  if (precio === "" || precio === null || precio === undefined) return "Completá el precio.";
+  if (!Number.isInteger(Number(precio)) || precio < 0 || precio > 10000000) {
+    return "El precio tiene que ser un número entero, sin puntos ni comas, y no puede ser negativo.";
+  }
+  return "";
+}

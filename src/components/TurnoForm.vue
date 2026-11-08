@@ -16,10 +16,16 @@ const props = defineProps({
   fechaInicial: { type: String, required: true },
   barberiaId: { type: String, required: true },
   perfilId: { type: String, required: true }, // el barbero logueado
+  rol: { type: String, default: "dueno" }, // "dueno" o "barbero"
 });
 const emit = defineEmits(["cerrar", "guardado"]);
 
 const esEdicion = computed(() => props.turno !== null);
+
+// El dueño elige a qué barbero le da el turno y puede eliminarlo.
+// El barbero solo carga turnos para sí mismo y no elimina (los cancela).
+// La base controla lo mismo con RLS, por si alguien saltea la pantalla.
+const esDueno = computed(() => props.rol === "dueno");
 
 // Los servicios y barberos ahora salen de la base (antes era una lista fija)
 const servicios = ref([]);
@@ -39,6 +45,7 @@ const form = reactive({
 
 const error = ref("");
 const guardando = ref(false);
+const confirmandoBorrado = ref(false);
 
 onMounted(async () => {
   const [respServicios, respBarberos] = await Promise.all([
@@ -63,6 +70,8 @@ onMounted(async () => {
 function traducirError(err) {
   // 23505 = se rompió el índice "turnos_sin_pisar" (turno repetido)
   if (err.code === "23505") return "Ese barbero ya tiene un turno ese día a esa hora.";
+  // SIN_PERMISO lo arma db.js; 42501 es el error de RLS al insertar
+  if (err.code === "SIN_PERMISO" || err.code === "42501") return "No tenés permiso para hacer eso.";
   return "No se pudo guardar el turno. Probá de nuevo.";
 }
 
@@ -91,7 +100,7 @@ async function guardar() {
   const cliente = await guardarCliente(props.barberiaId, nombre, telefono);
   if (cliente.error) {
     guardando.value = false;
-    error.value = "No se pudo guardar el cliente.";
+    error.value = traducirError(cliente.error);
     return;
   }
 
@@ -121,16 +130,16 @@ async function guardar() {
   emit("guardado", esEdicion.value ? "Turno actualizado." : "Turno creado.");
 }
 
-// BAJA
+// BAJA: primero pido confirmación (confirmandoBorrado) y después borro
 async function eliminar() {
-  if (!confirm(`¿Eliminar el turno de ${props.turno.cliente?.nombre}?`)) return;
-
   guardando.value = true;
   const { error: err } = await eliminarTurno(props.turno.id);
   guardando.value = false;
+  confirmandoBorrado.value = false;
 
   if (err) {
-    error.value = "No se pudo eliminar el turno.";
+    error.value =
+      err.code === "SIN_PERMISO" ? "No tenés permiso para eliminar turnos." : "No se pudo eliminar el turno.";
     return;
   }
 
@@ -177,7 +186,7 @@ async function eliminar() {
         </select>
       </div>
 
-      <div v-if="barberos.length > 1" class="form-group">
+      <div v-if="esDueno && barberos.length > 1" class="form-group">
         <label>Barbero</label>
         <select v-model="form.perfilId">
           <option v-for="b in barberos" :key="b.id" :value="b.id">{{ b.nombre }}</option>
@@ -201,16 +210,32 @@ async function eliminar() {
 
       <p v-if="error" class="error-text">{{ error }}</p>
 
-      <div style="display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap;">
+      <!-- Confirmación antes de eliminar -->
+      <div v-if="confirmandoBorrado" class="confirmar-borrado">
+        <p>
+          ¿Seguro que querés eliminar el turno de <strong>{{ turno.cliente?.nombre }}</strong>?
+          No se puede deshacer.
+        </p>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn-danger" type="button" :disabled="guardando" @click="eliminar">
+            Sí, eliminar
+          </button>
+          <button class="btn btn-secondary" type="button" @click="confirmandoBorrado = false">
+            No
+          </button>
+        </div>
+      </div>
+
+      <div v-else style="display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap;">
         <button class="btn btn-primary" type="submit" :disabled="guardando">
           {{ guardando ? "Guardando..." : "Guardar" }}
         </button>
         <button
-          v-if="esEdicion"
+          v-if="esEdicion && esDueno"
           class="btn btn-danger"
           type="button"
           :disabled="guardando"
-          @click="eliminar"
+          @click="confirmandoBorrado = true"
         >
           Eliminar
         </button>
@@ -237,18 +262,15 @@ async function eliminar() {
   flex: 1;
 }
 
-.form-group select {
-  width: 100%;
-  padding: 12px 14px;
-  border: 1.5px solid var(--borde);
+.confirmar-borrado {
+  background: var(--peligro-bg);
   border-radius: 10px;
-  font-size: 14.5px;
-  font-family: inherit;
-  background: #fff;
+  padding: 12px 14px;
+  margin-top: 6px;
 }
 
-.form-group select:focus {
-  outline: none;
-  border-color: var(--mostaza);
+.confirmar-borrado p {
+  margin: 0 0 10px;
+  font-size: 13.5px;
 }
 </style>
