@@ -1,5 +1,5 @@
 -- =====================================================================
---  FLOW CAVERNÍCOLA — Estructura de la base de datos (SaaS Parte 5)
+--  FLOW CAVERNÍCOLA — Estructura de la base de datos
 --  Motor: PostgreSQL (Supabase)
 --
 --  Cómo usarlo: en Supabase entrar a SQL Editor > New query, pegar
@@ -7,6 +7,10 @@
 --
 --  Se puede correr más de una vez: al principio borra todo y lo
 --  vuelve a crear desde cero (OJO: también borra los datos).
+--
+--  Si ya tenías la base creada y NO querés perder los datos, no
+--  corras este archivo: corré actualizacion.sql, que agrega solo
+--  lo nuevo (reservas públicas y datos iniciales).
 -- =====================================================================
 
 
@@ -15,6 +19,9 @@
 -- ---------------------------------------------------------------------
 drop trigger  if exists al_registrarse_usuario on auth.users;
 drop function if exists public.crear_barberia_al_registrarse() cascade;
+drop function if exists public.cargar_datos_iniciales(uuid, uuid) cascade;
+drop function if exists public.horarios_disponibles(text, date) cascade;
+drop function if exists public.reservar_turno(text, bigint, date, time, text, text) cascade;
 drop function if exists public.mi_barberia() cascade;
 drop function if exists public.generar_slug(text) cascade;
 
@@ -246,9 +253,10 @@ create policy "turnos: solo mi barberia"
 
 -- =====================================================================
 -- 8. REGISTRO AUTOMÁTICO
---    Cuando alguien se registra en la app (registro.vue manda el nombre
---    de la barbería en user_metadata.barberia), se crea sola su
---    barbería y su perfil con rol "dueno".
+--    Cuando alguien se registra en la app (RegistroView.vue manda el
+--    nombre de la barbería en user_metadata.barberia), se crea sola su
+--    barbería, su perfil con rol "dueno" y unos datos iniciales para
+--    que pueda recibir reservas desde el primer minuto.
 -- =====================================================================
 
 -- "Barbería El Tano" -> "barberia-el-tano"
@@ -261,6 +269,26 @@ as $$
            regexp_replace(
              lower(translate(texto, 'áéíóúüñÁÉÍÓÚÜÑ', 'aeiouunaeiouun')),
              '[^a-z0-9]+', '-', 'g'))
+$$;
+
+-- Servicios y horarios de arranque para una barbería nueva.
+-- Sin esto, una barbería recién registrada no tiene servicios ni
+-- horarios, y entonces nadie puede reservarle un turno.
+-- Horario inicial: lunes a sábado de 10 a 20 hs.
+create function public.cargar_datos_iniciales(p_barberia uuid, p_perfil uuid)
+returns void
+language sql
+as $$
+  insert into public.servicios (barberia_id, nombre, duracion_min, precio)
+  values (p_barberia, 'Corte clásico', 30, 9000),
+         (p_barberia, 'Corte + barba', 45, 13000),
+         (p_barberia, 'Barba',         20, 6000)
+  on conflict (barberia_id, nombre) do nothing;
+
+  insert into public.horarios (barberia_id, perfil_id, dia_semana, hora_inicio, hora_fin)
+  select p_barberia, p_perfil, d, '10:00', '20:00'
+  from generate_series(1, 6) as d
+  where not exists (select 1 from public.horarios where perfil_id = p_perfil);
 $$;
 
 create function public.crear_barberia_al_registrarse()
@@ -300,6 +328,8 @@ begin
     'dueno'
   );
 
+  perform public.cargar_datos_iniciales(nueva_id, new.id);
+
   return new;
 end;
 $$;
@@ -307,3 +337,151 @@ $$;
 create trigger al_registrarse_usuario
   after insert on auth.users
   for each row execute function public.crear_barberia_al_registrarse();
+
+
+-- =====================================================================
+-- 9. RESERVAS PÚBLICAS (el cliente reserva SIN cuenta)
+--
+--    Problema: las políticas de clientes y turnos son solo para
+--    usuarios logueados, así que un cliente anónimo no puede ni ver
+--    qué horarios están ocupados ni insertar su turno.
+--
+--    Solución: dos funciones "security definer". Corren con permisos
+--    del dueño de la base, pero solo hacen UNA cosa controlada:
+--      - horarios_disponibles: devuelve las horas libres, sin datos
+--        de otros clientes.
+--      - reservar_turno: valida todo y recién ahí inserta.
+--    Desde Vue se llaman con supabase.rpc("nombre_funcion", {...}).
+-- =====================================================================
+
+-- Horas libres de una barbería en una fecha, de a 30 minutos.
+-- Una hora está libre si AL MENOS UN barbero trabaja a esa hora y no
+-- tiene otro turno (los cancelados no cuentan).
+create function public.horarios_disponibles(p_slug text, p_fecha date)
+returns table (hora time)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select distinct franja.hora
+  from public.barberias b
+  join public.horarios  h on h.barberia_id = b.id
+  join public.perfiles  p on p.id = h.perfil_id and p.activo
+  cross join lateral (
+    select g::time as hora
+    from generate_series(p_fecha + h.hora_inicio,
+                         p_fecha + h.hora_fin - interval '30 minutes',
+                         interval '30 minutes') as g
+  ) as franja
+  where b.slug = p_slug
+    and h.dia_semana = extract(dow from p_fecha)
+    -- no ofrezco horas que ya pasaron (la base está en UTC, paso a hora argentina)
+    and p_fecha + franja.hora > now() at time zone 'America/Argentina/Buenos_Aires'
+    and not exists (
+      select 1 from public.turnos t
+      where t.perfil_id = h.perfil_id
+        and t.fecha     = p_fecha
+        and t.hora      = franja.hora
+        and t.estado   <> 'cancelado'
+    )
+  order by franja.hora
+$$;
+
+-- Crea la reserva. Devuelve los datos para la pantalla de confirmación.
+create function public.reservar_turno(
+  p_slug        text,
+  p_servicio_id bigint,
+  p_fecha       date,
+  p_hora        time,
+  p_nombre      text,
+  p_telefono    text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_barberia  public.barberias%rowtype;
+  v_servicio  text;
+  v_perfil    uuid;
+  v_cliente   bigint;
+  v_turno     bigint;
+begin
+  if coalesce(trim(p_nombre), '') = '' or coalesce(trim(p_telefono), '') = '' then
+    raise exception 'Completá tu nombre y tu teléfono.';
+  end if;
+
+  select * into v_barberia from public.barberias where slug = p_slug;
+  if not found then
+    raise exception 'Esa barbería no existe.';
+  end if;
+
+  -- El servicio tiene que ser de ESTA barbería y estar activo
+  select nombre into v_servicio
+  from public.servicios
+  where id = p_servicio_id and barberia_id = v_barberia.id and activo;
+  if not found then
+    raise exception 'Ese servicio no está disponible.';
+  end if;
+
+  if p_fecha + p_hora <= now() at time zone 'America/Argentina/Buenos_Aires' then
+    raise exception 'Ese horario ya pasó.';
+  end if;
+
+  -- Busco un barbero que trabaje a esa hora y esté libre.
+  -- Si hay varios, le doy el turno al que tiene menos turnos ese día.
+  select h.perfil_id into v_perfil
+  from public.horarios h
+  join public.perfiles p on p.id = h.perfil_id and p.activo
+  where h.barberia_id = v_barberia.id
+    and h.dia_semana  = extract(dow from p_fecha)
+    and p_hora >= h.hora_inicio
+    and p_hora <  h.hora_fin
+    and not exists (
+      select 1 from public.turnos t
+      where t.perfil_id = h.perfil_id
+        and t.fecha     = p_fecha
+        and t.hora      = p_hora
+        and t.estado   <> 'cancelado'
+    )
+  order by (select count(*) from public.turnos t2
+            where t2.perfil_id = h.perfil_id
+              and t2.fecha     = p_fecha
+              and t2.estado   <> 'cancelado')
+  limit 1;
+
+  if v_perfil is null then
+    raise exception 'Ese horario ya no está disponible.';
+  end if;
+
+  -- Si el teléfono ya es cliente de esta barbería, uso ese registro
+  -- (y NO le piso el nombre: un anónimo no tiene que poder cambiarlo)
+  insert into public.clientes (barberia_id, nombre, telefono)
+  values (v_barberia.id, trim(p_nombre), trim(p_telefono))
+  on conflict (barberia_id, telefono) do update set nombre = clientes.nombre
+  returning id into v_cliente;
+
+  -- Si dos personas reservan la misma hora al mismo tiempo, el índice
+  -- "turnos_sin_pisar" frena al segundo con el error 23505
+  insert into public.turnos (barberia_id, cliente_id, servicio_id, perfil_id, fecha, hora)
+  values (v_barberia.id, v_cliente, p_servicio_id, v_perfil, p_fecha, p_hora)
+  returning id into v_turno;
+
+  return jsonb_build_object(
+    'turno_id', v_turno,
+    'barberia', v_barberia.nombre,
+    'servicio', v_servicio,
+    'fecha',    p_fecha,
+    'hora',     to_char(p_hora, 'HH24:MI')
+  );
+end;
+$$;
+
+-- Quién puede llamar a cada función desde la app
+grant execute on function public.horarios_disponibles(text, date) to anon, authenticated;
+grant execute on function public.reservar_turno(text, bigint, date, time, text, text) to anon, authenticated;
+
+-- Esta la usa solo el trigger: nadie la tiene que poder llamar con rpc()
+revoke execute on function public.cargar_datos_iniciales(uuid, uuid) from public, anon, authenticated;

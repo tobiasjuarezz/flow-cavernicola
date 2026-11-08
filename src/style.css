@@ -118,6 +118,43 @@ body {
   color: var(--negro);
 }
 
+/* En celulares el header se achica para que entre todo el menú */
+@media (max-width: 480px) {
+  .app-header {
+    padding: 12px 14px;
+    gap: 10px;
+  }
+
+  .app-header h1 {
+    font-size: 19px;
+  }
+
+  .app-header .tagline {
+    display: none;
+  }
+
+  .brand-mark {
+    width: 32px;
+    height: 32px;
+  }
+
+  .app-header nav a {
+    padding: 7px 11px;
+    font-size: 12.5px;
+  }
+
+}
+
+/* Aviso cuando la app corre sin Supabase */
+.demo-banner {
+  background: var(--pendiente-bg);
+  color: var(--pendiente);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: center;
+  padding: 8px 16px;
+}
+
 /* ---------- Layout ---------- */
 
 .container {
@@ -248,6 +285,11 @@ body {
   color: var(--pendiente);
 }
 
+.badge-confirmado {
+  background: #e3ecf8;
+  color: #2f5f9e;
+}
+
 .badge-completado {
   background: var(--exito-bg);
   color: var(--exito);
@@ -305,6 +347,19 @@ body {
 
 .turno-info strong {
   font-size: 14.5px;
+}
+
+/* Nombre y servicio en una sola línea cada uno; si no entran, "..." */
+.turno-info strong,
+.turno-info .muted {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.timeline-item .badge {
+  flex-shrink: 0;
 }
 
 .card.turno-card:hover {
@@ -394,6 +449,16 @@ body {
   font-weight: 600;
 }
 
+.exito-text {
+  background: var(--exito-bg);
+  color: var(--exito);
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 10px 14px;
+  border-radius: 10px;
+  margin: 0 0 14px;
+}
+
 /* ---------- Confirmation ---------- */
 
 .center-text {
@@ -466,4 +531,16 @@ body {
 .page-leave-to {
   opacity: 0;
   transform: translateY(-10px);
+}
+
+/* La agenda en celulares: un poco menos de espacio entre hora, avatar y datos
+   (va al final para pisar los valores de arriba) */
+@media (max-width: 480px) {
+  .timeline-item {
+    gap: 12px;
+  }
+
+  .timeline-hora {
+    min-width: 50px;
+  }
 }

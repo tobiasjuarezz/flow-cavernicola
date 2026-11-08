@@ -2,10 +2,12 @@
 import { ref } from "vue";
 import { useRouter } from "vue-router";
 import { supabase } from "@/supabase";
+import { validarNombre, validarEmail } from "@/utils/validaciones";
 
 const router = useRouter();
 
 const barberia = ref("");
+const nombre = ref("");
 const email = ref("");
 const password = ref("");
 const password2 = ref("");
@@ -22,10 +24,21 @@ function traducirError(mensaje) {
 async function registrar() {
   error.value = "";
 
-  if (!barberia.value.trim() || !email.value.trim() || !password.value) {
+  if (!barberia.value.trim() || !nombre.value.trim() || !email.value.trim() || !password.value) {
     error.value = "Completá todos los campos.";
     return;
   }
+  if (barberia.value.trim().length < 3) {
+    error.value = "El nombre de la barbería tiene que tener al menos 3 caracteres.";
+    return;
+  }
+
+  const errorDatos = validarNombre(nombre.value) || validarEmail(email.value);
+  if (errorDatos) {
+    error.value = errorDatos;
+    return;
+  }
+
   if (password.value.length < 6) {
     error.value = "La contraseña tiene que tener al menos 6 caracteres.";
     return;
@@ -40,8 +53,10 @@ async function registrar() {
   const { error: err } = await supabase.auth.signUp({
     email: email.value.trim(),
     password: password.value,
+    // Estos datos viajan en user_metadata. En la base, el trigger
+    // "al_registrarse_usuario" los usa para crear la barbería y el perfil.
     options: {
-      data: { barberia: barberia.value.trim() },
+      data: { barberia: barberia.value.trim(), nombre: nombre.value.trim() },
     },
   });
 
@@ -63,10 +78,14 @@ async function registrar() {
       <p>Registrá tu barbería y empezá a ordenar tus turnos</p>
     </div>
 
-    <form class="card" @submit.prevent="registrar">
+    <form class="card" novalidate @submit.prevent="registrar">
       <div class="form-group">
         <label>Nombre de la barbería</label>
         <input v-model="barberia" type="text" placeholder="Ej: Barbería El Tano" />
+      </div>
+      <div class="form-group">
+        <label>Tu nombre</label>
+        <input v-model="nombre" type="text" placeholder="Ej: Nico" />
       </div>
       <div class="form-group">
         <label>Email</label>

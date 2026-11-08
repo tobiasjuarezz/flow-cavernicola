@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
-import { supabase } from "@/supabase";
+import { supabase, modoDemo } from "@/supabase";
 import { useHideOnScroll } from "./composables/useHideOnScroll";
 
 const router = useRouter();
@@ -55,17 +55,19 @@ async function cerrarSesion() {
     <nav>
       <template v-if="usuario">
         <router-link to="/agenda">Agenda</router-link>
-        <router-link to="/reservar">Cliente</router-link>
         <router-link to="/cambiar-password">Clave</router-link>
         <a href="#" @click.prevent="cerrarSesion">Salir</a>
       </template>
       <template v-else>
         <router-link to="/login">Entrar</router-link>
         <router-link to="/registro">Registrarme</router-link>
-        <router-link to="/reservar">Cliente</router-link>
       </template>
     </nav>
   </header>
+
+  <div v-if="modoDemo" class="demo-banner">
+    Modo demo: no hay base de datos conectada, todo se guarda en este navegador.
+  </div>
 
   <router-view v-slot="{ Component }">
     <transition name="page" mode="out-in">

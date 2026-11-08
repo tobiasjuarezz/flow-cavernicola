@@ -4,9 +4,9 @@ import { supabase } from "@/supabase";
 import AgendaBarbero from "../views/AgendaBarbero.vue";
 import ReservaCliente from "../views/ReservaCliente.vue";
 import ConfirmacionReserva from "../views/ConfirmacionReserva.vue";
-import Login from "../views/login.vue";
-import Registro from "../views/registro.vue";
-import CambiarPassword from "../views/cambiarpassword.vue";
+import LoginView from "../views/LoginView.vue";
+import RegistroView from "../views/RegistroView.vue";
+import CambiarPasswordView from "../views/CambiarPasswordView.vue";
 
 const routes = [
   {
@@ -24,7 +24,7 @@ const routes = [
   {
     path: "/cambiar-password",
     name: "cambiar-password",
-    component: CambiarPassword,
+    component: CambiarPasswordView,
     meta: { requiereAuth: true },
   },
 
@@ -32,19 +32,20 @@ const routes = [
   {
     path: "/login",
     name: "login",
-    component: Login,
+    component: LoginView,
     meta: { soloInvitados: true },
   },
   {
     path: "/registro",
     name: "registro",
-    component: Registro,
+    component: RegistroView,
     meta: { soloInvitados: true },
   },
 
   // ---------- Públicas (el cliente reserva sin cuenta) ----------
+  // Cada barbería tiene su link: /reservar/la-cueva-barber
   {
-    path: "/reservar",
+    path: "/reservar/:slug",
     name: "reservar",
     component: ReservaCliente,
   },
@@ -52,6 +53,12 @@ const routes = [
     path: "/confirmacion",
     name: "confirmacion",
     component: ConfirmacionReserva,
+  },
+
+  // Cualquier dirección que no exista vuelve al inicio
+  {
+    path: "/:pathMatch(.*)*",
+    redirect: "/",
   },
 ];
 

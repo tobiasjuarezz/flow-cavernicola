@@ -1,38 +1,68 @@
 <script setup>
-import { ref, reactive, computed } from "vue";
-import { supabase } from "@/supabase";
+import { ref, reactive, computed, onMounted } from "vue";
+import {
+  listarServicios,
+  listarBarberos,
+  guardarCliente,
+  crearTurno,
+  actualizarTurno,
+  eliminarTurno,
+} from "@/services/db";
+import { horaCorta, precio } from "@/utils/fechas";
+import { validarNombre, validarTelefono } from "@/utils/validaciones";
 
 const props = defineProps({
   turno: { type: Object, default: null }, // null = alta, con datos = edición
   fechaInicial: { type: String, required: true },
+  barberiaId: { type: String, required: true },
+  perfilId: { type: String, required: true }, // el barbero logueado
 });
 const emit = defineEmits(["cerrar", "guardado"]);
 
-const servicios = [
-  "Corte clásico",
-  "Corte + barba",
-  "Corte + diseño",
-  "Barba",
-  "Corte niño",
-];
-
 const esEdicion = computed(() => props.turno !== null);
 
+// Los servicios y barberos ahora salen de la base (antes era una lista fija)
+const servicios = ref([]);
+const barberos = ref([]);
+
+// El turno viene con cliente, servicio y barbero unidos (ver db.js)
 const form = reactive({
   fecha: props.turno?.fecha ?? props.fechaInicial,
-  hora: props.turno?.hora?.slice(0, 5) ?? "",
-  cliente: props.turno?.cliente ?? "",
-  telefono: props.turno?.telefono ?? "",
-  servicio: props.turno?.servicio ?? servicios[0],
+  hora: horaCorta(props.turno?.hora),
+  clienteNombre: props.turno?.cliente?.nombre ?? "",
+  clienteTelefono: props.turno?.cliente?.telefono ?? "",
+  servicioId: props.turno?.servicio?.id ?? null,
+  perfilId: props.turno?.barbero?.id ?? props.perfilId,
   estado: props.turno?.estado ?? "pendiente",
+  notas: props.turno?.notas ?? "",
 });
 
 const error = ref("");
 const guardando = ref(false);
 
+onMounted(async () => {
+  const [respServicios, respBarberos] = await Promise.all([
+    listarServicios(props.barberiaId),
+    listarBarberos(props.barberiaId),
+  ]);
+
+  if (respServicios.error || respBarberos.error) {
+    error.value = "No se pudieron cargar los servicios.";
+    return;
+  }
+
+  // Muestro los activos (y el del turno, por si lo desactivaron después)
+  servicios.value = respServicios.data.filter((s) => s.activo || s.id === form.servicioId);
+  barberos.value = respBarberos.data;
+
+  if (!form.servicioId && servicios.value.length > 0) {
+    form.servicioId = servicios.value[0].id;
+  }
+});
+
 function traducirError(err) {
   // 23505 = se rompió el índice "turnos_sin_pisar" (turno repetido)
-  if (err.code === "23505") return "Ya tenés un turno ese día a esa hora.";
+  if (err.code === "23505") return "Ese barbero ya tiene un turno ese día a esa hora.";
   return "No se pudo guardar el turno. Probá de nuevo.";
 }
 
@@ -40,25 +70,45 @@ function traducirError(err) {
 async function guardar() {
   error.value = "";
 
-  if (!form.fecha || !form.hora || !form.cliente.trim() || !form.telefono.trim()) {
-    error.value = "Completá fecha, hora, cliente y teléfono.";
+  const nombre = form.clienteNombre.trim();
+  const telefono = form.clienteTelefono.trim();
+
+  if (!form.fecha || !form.hora || !nombre || !telefono || !form.servicioId) {
+    error.value = "Completá fecha, hora, cliente, teléfono y servicio.";
     return;
   }
 
-  const datos = {
-    fecha: form.fecha,
-    hora: form.hora,
-    cliente: form.cliente.trim(),
-    telefono: form.telefono.trim(),
-    servicio: form.servicio,
-    estado: form.estado,
-  };
+  // Además de que estén, que tengan el formato correcto
+  const errorDatos = validarNombre(nombre) || validarTelefono(telefono);
+  if (errorDatos) {
+    error.value = errorDatos;
+    return;
+  }
 
   guardando.value = true;
 
+  // 1) El cliente es una tabla aparte: lo busco por teléfono o lo creo
+  const cliente = await guardarCliente(props.barberiaId, nombre, telefono);
+  if (cliente.error) {
+    guardando.value = false;
+    error.value = "No se pudo guardar el cliente.";
+    return;
+  }
+
+  // 2) El turno guarda los ids, no los textos
+  const datos = {
+    cliente_id: cliente.data.id,
+    servicio_id: form.servicioId,
+    perfil_id: form.perfilId,
+    fecha: form.fecha,
+    hora: form.hora,
+    estado: form.estado,
+    notas: form.notas.trim() || null,
+  };
+
   const { error: err } = esEdicion.value
-    ? await supabase.from("turnos").update(datos).eq("id", props.turno.id)
-    : await supabase.from("turnos").insert(datos);
+    ? await actualizarTurno(props.turno.id, datos)
+    : await crearTurno({ barberia_id: props.barberiaId, ...datos });
 
   guardando.value = false;
 
@@ -67,20 +117,16 @@ async function guardar() {
     return;
   }
 
-  emit("guardado");
+  // Le aviso a la agenda qué pasó, así muestra el mensaje de éxito
+  emit("guardado", esEdicion.value ? "Turno actualizado." : "Turno creado.");
 }
 
 // BAJA
 async function eliminar() {
-  if (!confirm(`¿Eliminar el turno de ${props.turno.cliente}?`)) return;
+  if (!confirm(`¿Eliminar el turno de ${props.turno.cliente?.nombre}?`)) return;
 
   guardando.value = true;
-
-  const { error: err } = await supabase
-    .from("turnos")
-    .delete()
-    .eq("id", props.turno.id);
-
+  const { error: err } = await eliminarTurno(props.turno.id);
   guardando.value = false;
 
   if (err) {
@@ -88,13 +134,13 @@ async function eliminar() {
     return;
   }
 
-  emit("guardado");
+  emit("guardado", "Turno eliminado.");
 }
 </script>
 
 <template>
   <div class="overlay" @click.self="emit('cerrar')">
-    <form class="modal card" @submit.prevent="guardar">
+    <form class="modal card" novalidate @submit.prevent="guardar">
       <div class="page-title" style="margin-bottom: 12px;">
         <h2 style="font-size: 24px;">
           {{ esEdicion ? "Editar turno" : "Nuevo turno" }}
@@ -114,18 +160,27 @@ async function eliminar() {
 
       <div class="form-group">
         <label>Cliente</label>
-        <input v-model="form.cliente" type="text" placeholder="Nombre del cliente" />
+        <input v-model="form.clienteNombre" type="text" placeholder="Nombre del cliente" />
       </div>
 
       <div class="form-group">
         <label>Teléfono</label>
-        <input v-model="form.telefono" type="tel" placeholder="11 1234-5678" />
+        <input v-model="form.clienteTelefono" type="tel" placeholder="11 1234-5678" />
       </div>
 
       <div class="form-group">
         <label>Servicio</label>
-        <select v-model="form.servicio">
-          <option v-for="s in servicios" :key="s" :value="s">{{ s }}</option>
+        <select v-model="form.servicioId">
+          <option v-for="s in servicios" :key="s.id" :value="s.id">
+            {{ s.nombre }} — {{ precio(s.precio) }}
+          </option>
+        </select>
+      </div>
+
+      <div v-if="barberos.length > 1" class="form-group">
+        <label>Barbero</label>
+        <select v-model="form.perfilId">
+          <option v-for="b in barberos" :key="b.id" :value="b.id">{{ b.nombre }}</option>
         </select>
       </div>
 
@@ -133,9 +188,15 @@ async function eliminar() {
         <label>Estado</label>
         <select v-model="form.estado">
           <option value="pendiente">Pendiente</option>
+          <option value="confirmado">Confirmado</option>
           <option value="completado">Completado</option>
           <option value="cancelado">Cancelado</option>
         </select>
+      </div>
+
+      <div class="form-group">
+        <label>Notas (opcional)</label>
+        <input v-model="form.notas" type="text" placeholder="Ej: viene con el hijo" />
       </div>
 
       <p v-if="error" class="error-text">{{ error }}</p>

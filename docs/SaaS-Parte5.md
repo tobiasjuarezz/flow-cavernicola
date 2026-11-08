@@ -133,31 +133,35 @@ Para que los datos de una barbería nunca se mezclen con los de otra, uso tres c
 |---|---|---|
 | **dueno** | Quien registró la barbería. Hay uno solo por barbería. | Todo lo del barbero, y además editar los datos de la barbería. |
 | **barbero** | Empleado de la barbería. | Ver y gestionar los turnos, clientes, servicios y horarios de su barbería, y editar su propio perfil. |
-| **cliente** (sin cuenta) | Quien reserva desde el link público. | Ver la barbería, sus servicios y horarios. No ve los turnos ni los datos de otros clientes. |
+| **cliente** (sin cuenta) | Quien reserva desde el link público. | Ver la barbería, sus servicios y las horas libres, y reservar. No toca las tablas directo: usa las funciones `horarios_disponibles` y `reservar_turno` (sección 9 de `schema.sql`). No ve los turnos ni los datos de otros clientes. |
 
-**Registro automático:** cuando alguien se registra desde `registro.vue`, la app manda el nombre de la barbería en `user_metadata.barberia`. Un **trigger** (`al_registrarse_usuario`) crea solo la barbería, le genera el slug (por ejemplo "Barbería El Tano" → `barberia-el-tano`) y crea el perfil con rol `dueno`.
+**Registro automático:** cuando alguien se registra desde `RegistroView.vue`, la app manda el nombre de la barbería y del barbero en `user_metadata`. Un **trigger** (`al_registrarse_usuario`) crea solo la barbería, le genera el slug (por ejemplo "Barbería El Tano" → `barberia-el-tano`), crea el perfil con rol `dueno` y le carga servicios y horarios de arranque.
 
 ## 6. Organización de archivos y carpetas
 
 ```
-flow-cavernicola-main/
+flow-cavernicola/
 ├── docs/
 │   └── SaaS-Parte5.md        ← este documento (incluye el diagrama ER)
 ├── supabase/
-│   ├── schema.sql            ← crea tablas, relaciones, restricciones, RLS y trigger
+│   ├── schema.sql            ← crea tablas, relaciones, restricciones, RLS, trigger y funciones de reserva
+│   ├── actualizacion.sql     ← agrega lo nuevo a una base que ya existe, sin borrar datos
 │   └── seed.sql              ← datos ficticios de 2 barberías
 ├── src/
 │   ├── views/                ← pantallas completas (una por ruta)
-│   ├── components/           ← piezas reutilizables (TurnoForm, TurnoDetalle)
+│   ├── components/           ← piezas reutilizables (TurnoForm)
 │   ├── router/               ← rutas y protección de páginas con login
 │   ├── services/
-│   │   └── db.js             ← TODAS las operaciones con la base de datos
+│   │   ├── db.js             ← TODAS las operaciones con la base de datos
+│   │   └── dbDemo.js         ← las mismas funciones, guardando en el navegador (modo demo)
+│   ├── utils/                ← funciones de fechas, horas y precios
 │   ├── composables/          ← lógica reutilizable de Vue (useHideOnScroll)
-│   ├── data/                 ← datos de ejemplo (mock) de la etapa anterior
-│   ├── supabase.js           ← conexión a Supabase (y modo demo sin conexión)
+│   ├── supabase.js           ← conexión a Supabase (y login de demo sin conexión)
 │   ├── App.vue               ← componente raíz (barra de navegación + router-view)
 │   ├── main.js               ← arranca la app
 │   └── style.css             ← estilos globales
+├── .env.example              ← modelo del .env con las claves de Supabase
+├── README.md
 ├── index.html
 ├── package.json
 └── vite.config.js
@@ -167,12 +171,13 @@ flow-cavernicola-main/
 |---|---|
 | `views/` | Las pantallas: agenda del barbero, login, registro, cambiar contraseña, reserva del cliente y confirmación. |
 | `components/` | Partes que se reutilizan dentro de las vistas, como el formulario de turno. |
-| `router/` | Define las rutas y el `beforeEach` que manda al login si la página necesita sesión. |
+| `router/` | Define las rutas y el `beforeEach` que manda al login si la página necesita sesión. La reserva pública es `/reservar/:slug`. |
 | `services/db.js` | El lugar central de la base de datos. Las vistas llaman a funciones como `listarTurnosDelDia()` o `crearTurno()` en vez de escribir consultas sueltas. Si cambia una tabla, se toca solo este archivo. |
+| `services/dbDemo.js` | Si no hay `.env`, `db.js` usa estas funciones en vez de Supabase. Tienen los mismos nombres, así las vistas no se enteran. |
+| `utils/` | Funciones chicas que se usan en varias pantallas (fecha de hoy en hora local, formato de precio). |
 | `supabase.js` | Crea el cliente de Supabase con las variables del `.env`. |
-| `supabase/` | Los scripts SQL para reconstruir la base desde cero. |
+| `supabase/` | Los scripts SQL para reconstruir la base desde cero o actualizarla. |
 | `docs/` | La documentación del proyecto. |
-| `data/` | Datos mock que usé antes de tener base. Se va a eliminar cuando todas las vistas usen `services/db.js`. |
 
 ## 7. Creación de la base en Supabase
 

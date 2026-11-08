@@ -1,24 +1,27 @@
 <script setup>
 import { ref, computed, onMounted, watch } from "vue";
-import { supabase } from "@/supabase";
-import TurnoForm from "../components/TurnoForm.vue";
+import { obtenerMiPerfil, listarTurnosDelDia } from "@/services/db";
+import { hoy, horaCorta } from "@/utils/fechas";
+import TurnoForm from "@/components/TurnoForm.vue";
 
-// Fecha de hoy en hora local (toISOString solo da UTC y después de las
-// 21 hs en Argentina ya te devolvería el día siguiente)
-function fechaDeHoy() {
-  const d = new Date();
-  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-  return d.toISOString().slice(0, 10);
-}
-
+const perfil = ref(null);
 const turnos = ref([]);
-const fecha = ref(fechaDeHoy());
+const fecha = ref(hoy());
 const cargando = ref(true);
 const error = ref("");
-const nombreBarberia = ref("");
 
 const formAbierto = ref(false);
 const turnoEditando = ref(null);
+const linkCopiado = ref(false);
+const mensajeExito = ref("");
+
+// perfil.barberia viene unido en la consulta de obtenerMiPerfil()
+const barberia = computed(() => perfil.value?.barberia ?? null);
+
+// El link propio de cada barbería: /reservar/<slug>
+const linkReserva = computed(() =>
+  barberia.value ? `${window.location.origin}/reservar/${barberia.value.slug}` : ""
+);
 
 const turnosActivos = computed(
   () => turnos.value.filter((t) => t.estado !== "cancelado").length
@@ -26,14 +29,12 @@ const turnosActivos = computed(
 
 // LECTURA: trae los turnos del día elegido, ordenados por hora
 async function cargarTurnos() {
+  if (!barberia.value || !fecha.value) return;
+
   cargando.value = true;
   error.value = "";
 
-  const { data, error: err } = await supabase
-    .from("turnos")
-    .select("*")
-    .eq("fecha", fecha.value)
-    .order("hora", { ascending: true });
+  const { data, error: err } = await listarTurnosDelDia(barberia.value.id, fecha.value);
 
   cargando.value = false;
 
@@ -46,15 +47,23 @@ async function cargarTurnos() {
 }
 
 onMounted(async () => {
-  const { data } = await supabase.auth.getUser();
-  nombreBarberia.value = data.user?.user_metadata?.barberia || "Mi barbería";
+  const { data, error: err } = await obtenerMiPerfil();
+
+  if (err || !data) {
+    cargando.value = false;
+    error.value =
+      "Tu usuario no tiene una barbería asociada. Creá una cuenta nueva desde «Registrarme».";
+    return;
+  }
+
+  perfil.value = data;
   cargarTurnos();
 });
 
 // Cada vez que cambio la fecha, recargo la agenda
 watch(fecha, cargarTurnos);
 
-function iniciales(nombre) {
+function iniciales(nombre = "") {
   return nombre
     .split(" ")
     .filter(Boolean)
@@ -79,15 +88,25 @@ function cerrarForm() {
   turnoEditando.value = null;
 }
 
-function alGuardar() {
+// TurnoForm me manda el mensaje ("Turno creado.", "Turno eliminado.", etc.)
+let temporizador = null;
+function alGuardar(mensaje) {
   cerrarForm();
   cargarTurnos();
+
+  mensajeExito.value = mensaje;
+  clearTimeout(temporizador);
+  temporizador = setTimeout(() => (mensajeExito.value = ""), 3000);
 }
 
-function compartirLink() {
-  const link = `${window.location.origin}/reservar`;
-  navigator.clipboard?.writeText(link);
-  alert("Link de reserva copiado:\n" + link);
+async function copiarLink() {
+  try {
+    await navigator.clipboard.writeText(linkReserva.value);
+    linkCopiado.value = true;
+    setTimeout(() => (linkCopiado.value = false), 2500);
+  } catch {
+    // Si el navegador no deja copiar, el link igual está a la vista
+  }
 }
 </script>
 
@@ -95,10 +114,23 @@ function compartirLink() {
   <div class="container">
     <div class="page-title">
       <h2>Agenda</h2>
-      <p>{{ nombreBarberia }}</p>
+      <p>{{ barberia?.nombre || "Mi barbería" }}</p>
     </div>
 
-    <div class="card">
+    <div v-if="barberia" class="card link-card">
+      <div>
+        <strong>Tu link de reservas</strong>
+        <div class="muted link-texto">{{ linkReserva }}</div>
+      </div>
+      <div class="acciones">
+        <button class="btn btn-secondary" @click="copiarLink">
+          {{ linkCopiado ? "¡Copiado!" : "Copiar" }}
+        </button>
+        <a class="btn btn-secondary" :href="linkReserva" target="_blank">Ver mi página</a>
+      </div>
+    </div>
+
+    <div v-if="barberia" class="card">
       <div class="form-group" style="margin-bottom: 14px;">
         <label>Día</label>
         <input v-model="fecha" type="date" />
@@ -106,18 +138,19 @@ function compartirLink() {
 
       <div class="card-header">
         <div>
-          <strong>{{ turnosActivos }} turnos activos</strong>
+          <strong>
+            {{ turnosActivos }} {{ turnosActivos === 1 ? "turno activo" : "turnos activos" }}
+          </strong>
           <div class="muted">Tocá un turno para editarlo</div>
         </div>
-        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-          <button class="btn btn-primary" @click="abrirAlta">+ Nuevo turno</button>
-          <button class="btn btn-secondary" @click="compartirLink">Compartir link</button>
-        </div>
+        <button class="btn btn-primary" @click="abrirAlta">+ Nuevo turno</button>
       </div>
     </div>
 
-    <p v-if="cargando" class="muted center-text">Cargando turnos...</p>
-    <p v-else-if="error" class="error-text center-text">{{ error }}</p>
+    <p v-if="mensajeExito" class="exito-text center-text">✓ {{ mensajeExito }}</p>
+
+    <p v-if="error" class="error-text center-text">{{ error }}</p>
+    <p v-else-if="cargando" class="muted center-text">Cargando turnos...</p>
 
     <div v-else-if="turnos.length === 0" class="card turno-libre center-text">
       <p class="muted" style="margin: 6px 0;">No hay turnos para este día.</p>
@@ -128,17 +161,19 @@ function compartirLink() {
         v-for="turno in turnos"
         :key="turno.id"
         class="card turno-card"
-        :style="turno.estado === 'cancelado' ? 'opacity: 0.55;' : ''"
+        :class="{ 'turno-cancelado': turno.estado === 'cancelado' }"
         @click="abrirEdicion(turno)"
       >
         <div class="timeline-item">
-          <div class="timeline-hora">{{ turno.hora.slice(0, 5) }}</div>
+          <div class="timeline-hora">{{ horaCorta(turno.hora) }}</div>
 
-          <div class="avatar">{{ iniciales(turno.cliente) }}</div>
+          <div class="avatar">{{ iniciales(turno.cliente?.nombre) }}</div>
 
           <div class="turno-info">
-            <strong>{{ turno.cliente }}</strong>
-            <div class="muted">{{ turno.servicio }}</div>
+            <strong>{{ turno.cliente?.nombre }}</strong>
+            <div class="muted">
+              {{ turno.servicio?.nombre }} · {{ turno.barbero?.nombre }}
+            </div>
           </div>
 
           <span class="badge" :class="'badge-' + turno.estado">
@@ -152,8 +187,38 @@ function compartirLink() {
       v-if="formAbierto"
       :turno="turnoEditando"
       :fecha-inicial="fecha"
+      :barberia-id="barberia.id"
+      :perfil-id="perfil.id"
       @cerrar="cerrarForm"
       @guardado="alGuardar"
     />
   </div>
 </template>
+
+<style scoped>
+.link-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.link-texto {
+  word-break: break-all;
+  margin-top: 2px;
+}
+
+.acciones {
+  display: flex;
+  gap: 8px;
+}
+
+.acciones a {
+  text-decoration: none;
+}
+
+.turno-cancelado {
+  opacity: 0.55;
+}
+</style>

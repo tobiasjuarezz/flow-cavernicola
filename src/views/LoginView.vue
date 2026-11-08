@@ -2,6 +2,7 @@
 import { ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { supabase } from "@/supabase";
+import { validarEmail } from "@/utils/validaciones";
 
 const router = useRouter();
 const route = useRoute();
@@ -22,6 +23,12 @@ async function iniciarSesion() {
 
   if (!email.value.trim() || !password.value) {
     error.value = "Completá tu email y tu contraseña.";
+    return;
+  }
+
+  const errorEmail = validarEmail(email.value);
+  if (errorEmail) {
+    error.value = errorEmail;
     return;
   }
 
@@ -51,7 +58,7 @@ async function iniciarSesion() {
       <p>Entrá a la agenda de tu barbería</p>
     </div>
 
-    <form class="card" @submit.prevent="iniciarSesion">
+    <form class="card" novalidate @submit.prevent="iniciarSesion">
       <div class="form-group">
         <label>Email</label>
         <input v-model="email" type="email" placeholder="tu@email.com" />
