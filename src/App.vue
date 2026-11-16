@@ -74,7 +74,9 @@ async function cerrarSesion() {
       <template v-if="usuario">
         <router-link to="/agenda">Agenda</router-link>
         <router-link v-if="rol === 'dueno'" to="/servicios">Servicios</router-link>
-        <router-link to="/cambiar-password">Clave</router-link>
+        <!-- El dueño cambia la clave desde "Barbería" (así entran 4 opciones en el celu) -->
+        <router-link v-if="rol === 'dueno'" to="/mi-barberia">Barbería</router-link>
+        <router-link v-else-if="rol" to="/cambiar-password">Clave</router-link>
         <a href="#" @click.prevent="cerrarSesion">Salir</a>
       </template>
       <template v-else>

@@ -145,7 +145,7 @@ body {
 }
 
 /* En pantallas muy angostas queda solo el logo, así entra todo el menú
-   (el dueño tiene 4 opciones: Agenda, Servicios, Clave y Salir) */
+   (el dueño tiene 4 opciones: Agenda, Servicios, Barbería y Salir) */
 @media (max-width: 430px) {
   .brand > div:not(.brand-mark) {
     display: none;

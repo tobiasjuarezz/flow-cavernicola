@@ -180,6 +180,92 @@ export async function buscarBarberiaPorSlug(slug) {
   );
 }
 
+export async function obtenerMiBarberia(barberiaId) {
+  const db = leer();
+  const perfil = await miPerfil(db);
+  const b = db.barberias.find((x) => x.id === barberiaId);
+  if (!perfil || !b || perfil.barberia_id !== barberiaId) return falla("No autorizado");
+  const { id, nombre, slug, telefono, direccion, plan } = b;
+  return ok({ id, nombre, slug, telefono, direccion, plan });
+}
+
+// Igual que la base: solo el dueño, y solo nombre, teléfono y dirección
+export async function guardarBarberia({ id, nombre, telefono, direccion }) {
+  const db = leer();
+  const perfil = await miPerfil(db);
+  const b = db.barberias.find((x) => x.id === id);
+  if (!perfil || perfil.rol !== "dueno" || !b || perfil.barberia_id !== id) {
+    return falla("No tenés permiso para hacer eso.", "SIN_PERMISO");
+  }
+  Object.assign(b, { nombre, telefono, direccion });
+  guardar(db);
+  return ok([{ id }]);
+}
+
+// ---------------------------------------------------------------------
+// HORARIOS de atención
+// ---------------------------------------------------------------------
+export async function listarHorarios(barberiaId) {
+  const lista = leer()
+    .horarios.filter((h) => h.barberia_id === barberiaId)
+    .sort((a, b) => a.dia_semana - b.dia_semana || a.hora_inicio.localeCompare(b.hora_inicio))
+    .map(({ id, perfil_id, dia_semana, hora_inicio, hora_fin }) => ({
+      id,
+      perfil_id,
+      dia_semana,
+      hora_inicio,
+      hora_fin,
+    }));
+  return ok(lista);
+}
+
+export async function guardarHorario(horario) {
+  const db = leer();
+  const perfil = await miPerfil(db);
+  if (!perfil || perfil.rol !== "dueno" || perfil.barberia_id !== horario.barberia_id) {
+    return falla("No tenés permiso para hacer eso.", "SIN_PERMISO");
+  }
+
+  const datos = {
+    ...horario,
+    hora_inicio: normalizarHora(horario.hora_inicio),
+    hora_fin: normalizarHora(horario.hora_fin),
+  };
+
+  // Igual que el trigger horarios_sin_superponer de la base
+  const pisa = db.horarios.some(
+    (h) =>
+      h.id !== datos.id &&
+      h.perfil_id === datos.perfil_id &&
+      h.dia_semana === datos.dia_semana &&
+      datos.hora_inicio < h.hora_fin &&
+      h.hora_inicio < datos.hora_fin
+  );
+  if (pisa) return falla("franja superpuesta", "23P01");
+
+  if (datos.id) {
+    const actual = db.horarios.find((h) => h.id === datos.id && h.barberia_id === perfil.barberia_id);
+    if (!actual) return falla("No tenés permiso para hacer eso.", "SIN_PERMISO");
+    Object.assign(actual, datos);
+  } else {
+    db.horarios.push({ ...datos, id: nuevoId(db) });
+  }
+  guardar(db);
+  return ok({ id: datos.id });
+}
+
+export async function eliminarHorario(id) {
+  const db = leer();
+  const perfil = await miPerfil(db);
+  const horario = db.horarios.find((h) => h.id === id);
+  if (!perfil || perfil.rol !== "dueno" || !horario || horario.barberia_id !== perfil.barberia_id) {
+    return falla("No tenés permiso para hacer eso.", "SIN_PERMISO");
+  }
+  db.horarios = db.horarios.filter((h) => h.id !== id);
+  guardar(db);
+  return ok([{ id }]);
+}
+
 // ---------------------------------------------------------------------
 // SERVICIOS y BARBEROS
 // ---------------------------------------------------------------------

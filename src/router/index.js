@@ -9,6 +9,7 @@ import LoginView from "../views/LoginView.vue";
 import RegistroView from "../views/RegistroView.vue";
 import CambiarPasswordView from "../views/CambiarPasswordView.vue";
 import ServiciosView from "../views/ServiciosView.vue";
+import MiBarberiaView from "../views/MiBarberiaView.vue";
 
 const routes = [
   {
@@ -28,6 +29,13 @@ const routes = [
     path: "/servicios",
     name: "servicios",
     component: ServiciosView,
+    meta: { requiereAuth: true, rol: "dueno" },
+  },
+  // Datos y horarios de la barbería: también solo el dueño
+  {
+    path: "/mi-barberia",
+    name: "mi-barberia",
+    component: MiBarberiaView,
     meta: { requiereAuth: true, rol: "dueno" },
   },
   {

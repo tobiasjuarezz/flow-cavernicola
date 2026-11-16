@@ -56,6 +56,52 @@ const real = {
       .maybeSingle();
   },
 
+  // Datos completos de mi barbería (pantalla "Mi barbería")
+  obtenerMiBarberia(barberiaId) {
+    return supabase
+      .from("barberias")
+      .select("id, nombre, slug, telefono, direccion, plan")
+      .eq("id", barberiaId)
+      .single();
+  },
+
+  // Solo el dueño (RLS). Mando SOLO nombre, teléfono y dirección: el
+  // plan y el link (slug) no se pueden cambiar desde la app, y la base
+  // tampoco lo deja (ver actualizacion-final.sql).
+  guardarBarberia({ id, nombre, telefono, direccion }) {
+    return exigirFilas(
+      supabase
+        .from("barberias")
+        .update({ nombre, telefono, direccion })
+        .eq("id", id)
+        .select("id")
+    );
+  },
+
+  // -------------------------------------------------------------------
+  // HORARIOS de atención (dia_semana: 0 = domingo ... 6 = sábado)
+  // -------------------------------------------------------------------
+  listarHorarios(barberiaId) {
+    return supabase
+      .from("horarios")
+      .select("id, perfil_id, dia_semana, hora_inicio, hora_fin")
+      .eq("barberia_id", barberiaId)
+      .order("dia_semana")
+      .order("hora_inicio");
+  },
+
+  // Si trae id es edición, si no es alta. Solo el dueño puede (RLS).
+  guardarHorario(horario) {
+    const { id, ...datos } = horario;
+    return id
+      ? exigirFilas(supabase.from("horarios").update(datos).eq("id", id).select("id"))
+      : supabase.from("horarios").insert(datos).select("id").single();
+  },
+
+  eliminarHorario(id) {
+    return exigirFilas(supabase.from("horarios").delete().eq("id", id).select("id"));
+  },
+
   // -------------------------------------------------------------------
   // SERVICIOS y BARBEROS
   // -------------------------------------------------------------------
@@ -188,6 +234,11 @@ const api = modoDemo ? demo : real;
 export const {
   obtenerMiPerfil,
   buscarBarberiaPorSlug,
+  obtenerMiBarberia,
+  guardarBarberia,
+  listarHorarios,
+  guardarHorario,
+  eliminarHorario,
   listarServicios,
   guardarServicio,
   eliminarServicio,

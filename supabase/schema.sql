@@ -9,8 +9,9 @@
 --  vuelve a crear desde cero (OJO: también borra los datos).
 --
 --  Si ya tenías la base creada y NO querés perder los datos, no
---  corras este archivo: corré actualizacion.sql, que agrega solo
---  lo nuevo (reservas públicas y datos iniciales).
+--  corras este archivo: corré en orden las actualizaciones que te
+--  falten (actualizacion.sql, actualizacion-parte7.sql y
+--  actualizacion-final.sql), que agregan solo lo nuevo.
 -- =====================================================================
 
 
@@ -25,6 +26,7 @@ drop function if exists public.reservar_turno(text, bigint, date, time, text, te
 drop function if exists public.mi_barberia() cascade;
 drop function if exists public.mi_rol() cascade;
 drop function if exists public.generar_slug(text) cascade;
+drop function if exists public.horarios_sin_superponer() cascade;
 
 drop table if exists public.turnos    cascade;
 drop table if exists public.clientes  cascade;
@@ -112,6 +114,35 @@ create table public.horarios (
   foreign key (barberia_id)
     references public.barberias (id) on delete cascade
 );
+
+-- Las franjas de un mismo barbero no se pueden pisar el mismo día.
+-- Ej: martes 10-14 y martes 13-18 -> error. Martes 10-14 y 16-20 -> bien.
+create function public.horarios_sin_superponer()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if exists (
+    select 1
+    from public.horarios h
+    where h.perfil_id   = new.perfil_id
+      and h.dia_semana  = new.dia_semana
+      and h.id is distinct from new.id        -- al editar, no me comparo conmigo
+      and new.hora_inicio < h.hora_fin
+      and h.hora_inicio   < new.hora_fin
+  ) then
+    -- 23P01 = "exclusion_violation": la pantalla lo traduce a un mensaje
+    raise exception 'La franja se superpone con otra del mismo barbero ese día'
+      using errcode = '23P01';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger horarios_sin_superponer
+  before insert or update on public.horarios
+  for each row execute function public.horarios_sin_superponer();
 
 
 -- ---------------------------------------------------------------------
@@ -229,6 +260,13 @@ create policy "barberias: el dueno edita la suya"
   on public.barberias for update to authenticated
   using (id = public.mi_barberia() and public.mi_rol() = 'dueno')
   with check (id = public.mi_barberia());
+
+-- RLS decide QUÉ FILAS se tocan; esto decide QUÉ COLUMNAS. Desde la app
+-- solo se cambian nombre, teléfono y dirección: el plan (lo que se
+-- paga) y el link (slug) no. Sin esto, un dueño podía pasarse al plan
+-- "empresa" llamando a la API directo (Parte Final).
+revoke update on public.barberias from anon, authenticated;
+grant update (nombre, telefono, direccion) on public.barberias to authenticated;
 
 -- PERFILES: veo a los barberos de mi barbería; cada uno edita el suyo,
 -- pero NO puede cambiarse el rol ni pasarse a otra barbería
