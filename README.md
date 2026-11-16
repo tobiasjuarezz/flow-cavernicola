@@ -6,6 +6,9 @@ Cada barbería tiene su propio link de reserva (por ejemplo `/reservar/la-cueva-
 
 Proyecto de la materia PDISC 7.6 — E.E.S. Técnica N°1, Esteban Echeverría.
 
+**Probalo:** https://flow-cavernicola.vercel.app · Reservas de ejemplo: https://flow-cavernicola.vercel.app/reservar/la-cueva-barber
+(cuentas de demostración más abajo, todas con contraseña `123456`)
+
 ## Qué hace
 
 **Dueño de la barbería (con cuenta)**
@@ -14,6 +17,7 @@ Proyecto de la materia PDISC 7.6 — E.E.S. Técnica N°1, Esteban Echeverría.
 - Crea, edita, cancela y elimina cualquier turno (pide confirmación antes de eliminar).
 - Administra los servicios: alta, edición de precio y duración, activar/desactivar y baja.
 - Copia o abre su link de reservas para compartirlo.
+- En "Mi barbería" edita el nombre, el teléfono y la dirección, y los horarios de atención de cada barbero (sin franjas superpuestas).
 
 **Barbero empleado (con cuenta)**
 - Ve la agenda de la barbería, pero solo crea y modifica **sus** turnos.
@@ -49,6 +53,13 @@ Sin configurar nada arranca en **modo demo**: el login y los datos se guardan en
 **¿Ya tenías la base creada?** No vuelvas a correr `schema.sql` (borra todo). Corré en orden las actualizaciones que te falten, que no tocan tus datos:
 - `supabase/actualizacion.sql` (Parte 6: reservas públicas)
 - `supabase/actualizacion-parte7.sql` (Parte 7: permisos por rol)
+- `supabase/actualizacion-final.sql` (Parte Final: horarios sin superponer y qué datos de la barbería se pueden cambiar)
+
+**Para la demo:** corré `supabase/datos-demo.sql` el mismo día que la muestres. Carga turnos ficticios para hoy y los próximos 6 días (no borra nada y no duplica).
+
+### Publicado en Vercel
+
+Importé el repo en Vercel (detecta Vite solo) y cargué `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY` como variables de entorno. `vercel.json` hace que las rutas directas (`/agenda`, `/reservar/...`) no den 404. Cada cambio en `main` se publica solo.
 
 ### Usuarios de prueba (del seed)
 
@@ -75,11 +86,14 @@ supabase/
 ├── schema.sql              tablas, relaciones, RLS por rol, trigger y funciones de reserva
 ├── actualizacion.sql       Parte 6, para una base existente (no borra datos)
 ├── actualizacion-parte7.sql Parte 7: permisos por rol (no borra datos)
+├── actualizacion-final.sql  Parte Final: horarios y permisos por columna (no borra datos)
+├── datos-demo.sql    turnos ficticios para la semana de la demo
 └── seed.sql          2 barberías de prueba
 docs/
 ├── SaaS-Parte5.md    diseño de la base: DER, roles y diccionario de datos
 ├── SaaS-Parte6.md    función principal (reservar un turno), recorrido y pruebas
-└── SaaS-Parte7.md    ABM completo, búsqueda, roles y permisos, pruebas por rol
+├── SaaS-Parte7.md    ABM completo, búsqueda, roles y permisos, pruebas por rol
+└── SaaS-ParteFinal.md  roles, matriz de permisos, pruebas, publicación, guía de uso y evaluación
 ```
 
 ## Cómo cuido los datos de cada barbería
@@ -88,10 +102,11 @@ docs/
 - **RLS**: cada usuario solo ve y toca las filas de su barbería, y dentro de ella solo lo que le permite su rol (dueño o barbero). Ni cambiándose el rol desde la API se saltea.
 - El cliente sin cuenta **no puede leer ni escribir tablas directo**. Reserva a través de dos funciones de la base (`horarios_disponibles` y `reservar_turno`) que validan todo antes de guardar.
 - Un índice único no deja dar dos turnos al mismo barbero a la misma hora, ni aunque dos personas reserven en el mismo segundo.
+- **Permisos por columna**: de la barbería solo se pueden cambiar nombre, teléfono y dirección. El plan y el link no, ni llamando a la API.
 
-## Pendiente
+## Pendiente (próxima versión)
 
 - Recordatorio automático por WhatsApp.
-- Pantallas para editar los horarios y los datos de la barbería (los permisos en la base ya están: solo el dueño).
 - Que el dueño invite barberos empleados desde la app.
-- Publicarlo en Vercel.
+- Que el cliente cancele o reprograme su turno desde un link.
+- Ofrecer horas según la duración del servicio y bloquear días puntuales (feriados, vacaciones).
