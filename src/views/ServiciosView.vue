@@ -205,4 +205,13 @@ async function cambiarActivo(servicio) {
 .inactivo .servicio-info {
   opacity: 0.55;
 }
+
+/* En celulares el buscador y el orden van uno abajo del otro
+   (si no, el buscador queda tan angosto que no se lee) */
+@media (max-width: 480px) {
+  .fila {
+    flex-direction: column;
+    gap: 0;
+  }
+}
 </style>

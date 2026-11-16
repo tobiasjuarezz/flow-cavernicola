@@ -576,4 +576,10 @@ body {
   .timeline-hora {
     min-width: 50px;
   }
+
+  /* En el celu saco el círculo con las iniciales: así entran el nombre
+     del cliente y el servicio sin cortarse con "..." (Parte Final) */
+  .timeline-item .avatar {
+    display: none;
+  }
 }
