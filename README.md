@@ -93,7 +93,8 @@ docs/
 ├── SaaS-Parte5.md    diseño de la base: DER, roles y diccionario de datos
 ├── SaaS-Parte6.md    función principal (reservar un turno), recorrido y pruebas
 ├── SaaS-Parte7.md    ABM completo, búsqueda, roles y permisos, pruebas por rol
-└── SaaS-ParteFinal.md  roles, matriz de permisos, pruebas, publicación, guía de uso y evaluación
+├── SaaS-ParteFinal.md  roles, matriz de permisos, pruebas, publicación, guía de uso y evaluación
+└── Informe_SaaS_Parte_Final_Flow_Cavernicola.docx  informe de entrega en Word para el profesor
 ```
 
 ## Cómo cuido los datos de cada barbería

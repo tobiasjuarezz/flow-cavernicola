@@ -6,6 +6,7 @@
 > **Link de prueba:** https://flow-cavernicola.vercel.app
 > **Página de reservas de ejemplo:** https://flow-cavernicola.vercel.app/reservar/la-cueva-barber
 > **Repositorio:** https://github.com/tobiasjuarezz/flow-cavernicola
+> **Informe para el profesor (Word):** [Informe_SaaS_Parte_Final_Flow_Cavernicola.docx](Informe_SaaS_Parte_Final_Flow_Cavernicola.docx)
 >
 > Cuentas de demostración (datos ficticios, contraseña `123456` en las tres):
 > `tano@lacueva.com` (dueño) · `rulo@lacueva.com` (barbero) · `nico@eltano.com` (dueño de otra barbería)
